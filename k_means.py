@@ -55,18 +55,22 @@ class KMeans:
                     self.centroids[i] = prev_centroids[i]
             iteration += 1
 
-        self.labels = self.predict(x_train)
+        self.labels = self.predict(x_train, **kwargs)
 
-    def predict(self, x):
+    def predict(self, x, **kwargs):
         centroids = []
         centroid_ids = []
+        sorted_points = [[] for _ in range(self.n_clusters)]
         self.inertia = 0
         for point in x:
             dists = euclidean(point, self.centroids)
             centroid_id = np.argmin(dists)
+            sorted_points[centroid_id].append(point)
             self.inertia += dists[centroid_id] ** 2
             centroids.append(self.centroids[centroid_id])
             centroid_ids.append(centroid_id)
+
+        self.centroids = self.find_means(sorted_points, **kwargs)
         return np.array(centroid_ids)
 
     def score(self, labels):
@@ -87,13 +91,17 @@ def empiric(x, n=100):
 
 def choquet_mean(x, **kwargs):
     if len(x) != 0:  # Prevent empty cluster error
+        x_min = x.min()
+        positive_square = x_min if x_min > 0 else 0
+        x_max = x.max()
+        negative_square = x_max if x_max < 0 else 0
         x_space, x = empiric(x, **kwargs)
         step = x_space[1] - x_space[0]
-        positive_area = sum((1 - x[x_space >= 0]) * step)
-        negative_area = sum(x[x_space < 0] * step)
+        positive_area = sum((1 - x[x_space >= 0]) * step) + positive_square
+        negative_area = sum(x[x_space < 0] * step) - negative_square
         return positive_area - negative_area
 
-    return 0
+    return np.array([np.nan, np.nan])
 
 
 class RobustKMeans(KMeans):
