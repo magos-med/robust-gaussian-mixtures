@@ -1,7 +1,7 @@
 import numpy as np
 from numpy.random import uniform
 from sklearn.metrics.cluster import contingency_matrix
-from scipy.stats import spearmanr, median_abs_deviation
+from scipy.stats import spearmanr, median_abs_deviation, rankdata
 import random
 
 
@@ -135,11 +135,15 @@ class GaussianMixtures:
 
         return np.cov(x, **kwargs)
 
+    @staticmethod
+    def init_centroids(x):
+        return [np.mean(e, axis=0) for e in x]
+
     def fit(self, x):
         # Splitting the data in n_components sub-sets
         new_x = np.array_split(x, self.n_clusters)
         # Initial computation of the mean-vector and covariance matrix
-        self.centroids = [np.mean(e, axis=0) for e in new_x]  # ToDo: Initialize with empiric mean
+        self.centroids = self.init_centroids(new_x)
         self.covariance_matrices = [self.cov(e.T, initial=True) for e in new_x]
         # Deleting the new_x matrix because we will not need it anymore
         del new_x
@@ -201,15 +205,15 @@ class SpearmanGaussianMixtures(GaussianMixtures):
     def _sigma(x):
         return np.std(x, axis=1).reshape(1, len(x))
 
-    def _cov(self, x):
-        corr = spearmanr(x.T)
-        if type(corr[0]) == np.float64:
-            correlation = np.array(
-                [[1, corr[0]],
-                 [corr[0], 1]]
-            )
-        else:
-            correlation = corr[0]
+    def _cov(self, x, w=None):
+
+        ranked_x = rankdata(x, axis=1)
+        if w is None:
+            w = np.ones(len(ranked_x[0]))
+
+        c = np.cov(ranked_x, aweights=w, ddof=0)
+        diag = np.diag(c).reshape(2, 1)
+        correlation = c / np.sqrt(diag @ diag.T)
 
         sigma = self._sigma(x)
         sigma_matrix = sigma.T @ sigma
@@ -220,11 +224,16 @@ class SpearmanGaussianMixtures(GaussianMixtures):
         if initial:
             return self._cov(x)
 
-        covariance = self._cov(x)
-        return np.cov(x, **kwargs)  # ToDo: Change this one properly
+        return self._cov(x, aweights)
 
 
 class MADSpearmanGaussianMixtures(SpearmanGaussianMixtures):
     @staticmethod
     def _sigma(x):
         return median_abs_deviation(x, axis=1).reshape(1, len(x))
+
+
+class MedianInitSpearmanGaussianMixtures(SpearmanGaussianMixtures):
+    @staticmethod
+    def init_centroids(x):
+        return [np.median(e, axis=0) for e in x]
