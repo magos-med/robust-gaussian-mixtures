@@ -185,6 +185,12 @@ class GaussianMixtures:
         self.labels = self.predict(x)
         self.centroids = np.array(self.centroids)
 
+    def probabilities(self, x):
+        probas = []
+        for n in range(len(x)):
+            probas.append([self.multivariate_normal(x[n], self.centroids[k], self.covariance_matrices[k])
+                           for k in range(self.n_clusters)])
+
     def predict(self, x):
         probas = []
         for n in range(len(x)):
