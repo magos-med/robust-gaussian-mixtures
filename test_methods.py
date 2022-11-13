@@ -28,14 +28,15 @@ def calculate_distance(x_train_scaled, true_labels, n_clusters):
     return avg_distance
 
 
-def test_method(model, results, x_train_scaled, true_labels, x_train_noise_scaled, true_labels_noise, n_clusters):
+def test_method(model, results, x_train_scaled, true_labels, x_train_noise_scaled, true_labels_noise, n_clusters,
+                reg_covar=1e-6):
     try:
-        gmm = model(n_components=n_clusters, max_iter=100)
+        gmm = model(n_components=n_clusters, max_iter=100, reg_covar=reg_covar)
         gmm.fit(x_train_scaled)
         score = gmm.accuracy_score(x_train_scaled, true_labels)
         results[f'{model.name}_score'] = score
 
-        gmm_noise = model(n_components=n_clusters, max_iter=100)
+        gmm_noise = model(n_components=n_clusters, max_iter=100, reg_covar=reg_covar)
         gmm_noise.fit(x_train_noise_scaled)
         score_noise = gmm_noise.accuracy_score(x_train_noise_scaled, true_labels_noise)
         results[f'{model.name}_score_noise'] = score_noise
@@ -49,6 +50,20 @@ def test_method(model, results, x_train_scaled, true_labels, x_train_noise_scale
         results[f'{model.name}_cov_variation'] = total
         print(results)
 
+    except ZeroDivisionError:
+        if reg_covar >= 1:
+            print_exc()
+        else:
+            test_method(model, results, x_train_scaled, true_labels, x_train_noise_scaled, true_labels_noise,
+                        n_clusters, reg_covar=reg_covar * 1000)
+
+    except np.linalg.LinAlgError:
+        if reg_covar >= 1:
+            print_exc()
+        else:
+            test_method(model, results, x_train_scaled, true_labels, x_train_noise_scaled, true_labels_noise,
+                        n_clusters, reg_covar=reg_covar * 1000)
+
     except Exception as ex:
         print(ex)
         print_exc()
@@ -60,7 +75,7 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
     mgr = Manager()
     results = mgr.dict()
     pool = Pool(processes=9)
-    pool.starmap(
+    result = pool.starmap_async(
         test_method,
         zip(
             ALL_MODELS,
@@ -72,6 +87,8 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
             repeat(n_clusters),
         )
     )
+
+    result.get(timeout=120)
 
     pool.close()
     pool.join()
