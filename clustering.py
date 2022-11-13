@@ -2,8 +2,7 @@ import random
 import numpy as np
 from numpy.random import uniform
 from sklearn.metrics.cluster import contingency_matrix
-from sklearn.cluster import kmeans_plusplus
-from sklearn.mixture._gaussian_mixture import GaussianMixture, _estimate_gaussian_parameters,\
+from sklearn.mixture._gaussian_mixture import GaussianMixture,\
     _compute_precision_cholesky, _estimate_gaussian_covariances_full
 from scipy.stats import median_abs_deviation, rankdata, weightedtau, linregress
 from scipy import linalg
@@ -117,158 +116,6 @@ class RobustKMeans(KMeans):
         return np.array([np.apply_along_axis(choquet_mean, 0, cluster, **kwargs) for cluster in sorted_points])
 
 
-class GaussianMixtures:
-    name = 'standard'
-
-    def __init__(self, n_clusters, max_iter=100, centroid_tol=0.005, cov_tol=0.01):
-        self.r = None
-        self.centroids = None
-        self.covariance_matrices = None
-        self.n_clusters = n_clusters
-        self.max_iter = max_iter
-        self.clusters = [i for i in range(self.n_clusters)]
-        # pi list contains the fraction of the dataset for every cluster
-        self.pi = [1 / self.n_clusters for _ in range(self.n_clusters)]
-        self.labels = np.array([])
-        self.centroid_tol = centroid_tol
-        self.cov_tol = cov_tol
-
-    @staticmethod
-    def multivariate_normal(x, mean_vector, covariance_matrix):
-        return (2 * np.pi) ** (-len(x) / 2) * np.linalg.det(covariance_matrix) ** (-1 / 2) * np.exp(
-            -np.dot(np.dot((x - mean_vector).T, np.linalg.inv(covariance_matrix)), (x - mean_vector)) / 2)
-
-    @staticmethod
-    def cov(x, initial=False, **kwargs):
-        if initial:
-            return np.cov(x)
-
-        return np.cov(x, **kwargs)
-
-    @staticmethod
-    def init_centroids(x):
-        return [np.mean(e, axis=0) for e in x]
-
-    def fit(self, x):
-        # k-means ++
-        resp = np.zeros((len(x), self.n_clusters))
-        _, indices = kmeans_plusplus(
-            x,
-            self.n_clusters,
-        )
-        resp[indices, np.arange(self.n_clusters)] = 1
-
-        _, means, __ = _estimate_gaussian_parameters(
-            x, resp, 1e-6, 'full'
-        )
-
-        self.centroids = means
-
-        # Splitting the data in n_components sub-sets
-        new_x = np.array_split(x, self.n_clusters)
-        self.covariance_matrices = [self.cov(e.T, initial=True) for e in new_x]
-        # Deleting the new_x matrix because we will not need it anymore
-        del new_x
-
-        prev_centroids = None
-        prev_cov = None
-        for iteration in range(self.max_iter):
-            if prev_centroids is not None and \
-                    (np.linalg.norm(np.sort(self.centroids, axis=0) -
-                                    np.sort(prev_centroids, axis=0)) < self.centroid_tol and
-                     np.linalg.norm(np.sort(self.covariance_matrices, axis=0) -
-                                    np.sort(prev_cov, axis=0)) < self.cov_tol):
-                break
-
-            ''' ----------------   E - STEP   ------------------ '''
-            # Initiating the r matrix, every row contains the probabilities
-            # for every cluster for this row
-            self.r = np.zeros((len(x), self.n_clusters))
-            # Calculating the r matrix
-            for i in range(len(x)):
-                for k in range(self.n_clusters):
-                    self.r[i][k] = self.pi[k] * self.multivariate_normal(x[i], self.centroids[k],
-                                                                         self.covariance_matrices[k])
-                    self.r[i][k] /= sum(
-                        [self.pi[j] * self.multivariate_normal(x[i], self.centroids[j], self.covariance_matrices[j])
-                         for j in range(self.n_clusters)])
-            # Calculating the N
-            n = np.sum(self.r, axis=0)
-
-            prev_centroids = self.centroids
-            prev_cov = self.covariance_matrices
-
-            ''' ---------------   M - STEP   --------------- '''
-            # Initializing the mean vector as a zero vector
-            self.centroids = np.zeros((self.n_clusters, len(x[0])))
-            # Updating the mean vector
-            for k in range(self.n_clusters):
-                for i in range(len(x)):
-                    self.centroids[k] += self.r[i][k] * x[i]
-
-            self.centroids = [1 / n[k] * self.centroids[k] for k in range(self.n_clusters)]
-            # Initiating the list of the covariance matrices
-            self.covariance_matrices = [np.zeros((len(x[0]), len(x[0]))) for _ in range(self.n_clusters)]
-            # Updating the covariance matrices
-            for k in range(self.n_clusters):
-                self.covariance_matrices[k] = self.cov(x.T, aweights=self.r[:, k], ddof=0)
-            self.covariance_matrices = [1 / n[k] * self.covariance_matrices[k] for k in range(self.n_clusters)]
-            # Updating the pi list
-            self.pi = [n[k] / len(x) for k in range(self.n_clusters)]
-
-        self.labels = self.predict(x)
-        self.centroids = np.array(self.centroids)
-
-    def probabilities(self, x):
-        probas = []
-        for n in range(len(x)):
-            probas.append([self.multivariate_normal(x[n], self.centroids[k], self.covariance_matrices[k])
-                           for k in range(self.n_clusters)])
-
-    def predict(self, x):
-        probas = []
-        for n in range(len(x)):
-            probas.append([self.multivariate_normal(x[n], self.centroids[k], self.covariance_matrices[k])
-                           for k in range(self.n_clusters)])
-        cluster = []
-        for proba in probas:
-            cluster.append(self.clusters[proba.index(max(proba))])
-        return cluster
-
-    def score(self, labels):
-        c_matrix = contingency_matrix(labels, self.labels)
-        return c_matrix.max(axis=0).sum() / c_matrix.sum()
-
-
-# class SpearmanGaussianMixtures(GaussianMixtures):
-#     name = 'spearman'
-#
-#     @staticmethod
-#     def _sigma(x):
-#         return np.std(x, axis=1).reshape(1, len(x))
-#
-#     def _cov(self, x, w=None):
-#
-#         ranked_x = rankdata(x, axis=1)
-#         if w is None:
-#             w = np.ones(len(ranked_x[0]))
-#
-#         c = np.cov(ranked_x, aweights=w, ddof=0)
-#         diag = np.diag(c).reshape(len(x), 1)
-#         correlation = c / np.sqrt(diag @ diag.T)
-#
-#         sigma = self._sigma(x)
-#         sigma_matrix = sigma.T @ sigma
-#
-#         return sigma_matrix * correlation
-#
-#     def cov(self, x, initial=False, aweights=None, **kwargs):
-#         if initial:
-#             return self._cov(x)
-#
-#         return self._cov(x, aweights)
-
-
 class StandardGaussianMixture(GaussianMixture):
     name = 'standard'
 
@@ -341,45 +188,12 @@ class SpearmanGaussianMixture(StandardGaussianMixture):
         return covariances
 
 
-# class MADSpearmanGaussianMixtures(SpearmanGaussianMixtures):
-#     name = 'mad_spearman'
-#
-#     @staticmethod
-#     def _sigma(x):
-#         return median_abs_deviation(x, axis=1).reshape(1, len(x))
-
-
 class MADSpearmanGaussianMixture(SpearmanGaussianMixture):
     name = 'mad_spearman'
 
     @staticmethod
     def _sigma(x):
         return median_abs_deviation(x, axis=0).reshape(1, x.shape[1])
-
-
-# class KendallGaussianMixtures(SpearmanGaussianMixtures):
-#     name = 'kendall'
-#
-#     @staticmethod
-#     def _corrcoef(x, w, i, j):
-#         return weightedtau(x=x[i, :], y=x[j, :], rank=range(x.shape[1]),
-#                            weigher=lambda idx: w[idx], additive=False)[0]
-#
-#     def _cov(self, x, w=None):
-#         n_features = len(x)
-#         if w is None:
-#             w = [1] * x.shape[1]
-#
-#         correlation = np.ones((n_features, n_features))
-#         for i, j in combinations(range(n_features), 2):
-#             coefficient = self._corrcoef(x, w, i, j)
-#             correlation[i, j] = coefficient
-#             correlation[j, i] = coefficient
-#
-#         sigma = self._sigma(x)
-#         sigma_matrix = sigma.T @ sigma
-#
-#         return sigma_matrix * correlation
 
 
 class KendallGaussianMixture(SpearmanGaussianMixture):
