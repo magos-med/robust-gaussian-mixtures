@@ -6,7 +6,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.datasets import make_blobs
 from itertools import combinations
 from traceback import print_exc
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool, Manager, TimeoutError
 from itertools import repeat
 
 from utils import ALL_MODELS
@@ -57,7 +57,7 @@ def test_method(model, results, x_train_scaled, true_labels, x_train_noise_scale
             test_method(model, results, x_train_scaled, true_labels, x_train_noise_scaled, true_labels_noise,
                         n_clusters, reg_covar=reg_covar * 1000)
 
-    except np.linalg.LinAlgError:
+    except ValueError:
         if reg_covar >= 1:
             print_exc()
         else:
@@ -88,10 +88,12 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
         )
     )
 
-    result.get(timeout=120)
-
-    pool.close()
-    pool.join()
+    try:
+        result.get(timeout=60)
+        pool.close()
+        pool.join()
+    except TimeoutError:
+        pool.close()
 
     for col in results:
         df[col] = results[col]
@@ -107,8 +109,11 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
 
 
 def main(n_tests):
-    _n_samples = np.random.choice([100, 1000, 10000, 100000], p=[0.7, 0.1, 0.1, 0.1], size=n_tests)
-    _n_clusters = np.random.choice(range(3, 20), size=n_tests)
+    # _n_samples = np.random.choice([100, 1000, 10000, 100000], p=[0.7, 0.1, 0.1, 0.1], size=n_tests)
+    _n_samples = np.random.choice([100, 1000, 10000], p=[0.7, 0.15, 0.15], size=n_tests)
+    # _n_samples = np.random.choice([100000], size=n_tests)
+    # _n_clusters = np.random.choice(range(3, 20), size=n_tests)
+    _n_clusters = np.random.choice(range(3, 9), size=n_tests)
     boxes_size = np.random.uniform(1.5, 20, n_tests)
     _noise_proportion = np.random.choice([0.01, 0.05, 0.1], size=n_tests)
     _std = np.random.choice([0.5, 1, 2, 3], size=n_tests)
@@ -118,8 +123,12 @@ def main(n_tests):
         p=[0.7, 0.1, 0.1, 0.1],
         size=n_tests
     )
+    # _n_features = np.random.choice(
+    #     list(range(2, 20)) + [100],
+    #     size=n_tests
+    # )
     _n_features = np.random.choice(
-        list(range(2, 20)) + [100],
+        list(range(2, 5)),
         size=n_tests
     )
 

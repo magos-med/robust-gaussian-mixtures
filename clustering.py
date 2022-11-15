@@ -234,6 +234,10 @@ class OrtizGaussianMixture(KendallGaussianMixture):
         return zip(combis, w_combis)
 
     def _corrcoef(self, x, w, i, j):
+        x = x.T * w
+        condition = abs(x[0, :]) <= 1e-10
+        w = w[~condition]
+        x = x.T[~condition]
         combis = list(combinations(x, 2))
         w_combis = list(combinations(w, 2))
         limit = self.initial_limit
