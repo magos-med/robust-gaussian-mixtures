@@ -204,7 +204,7 @@ class KendallGaussianMixture(SpearmanGaussianMixture):
         return weightedtau(x=x[i, :], y=x[j, :], rank=range(x.shape[1]),
                            weigher=lambda idx: w[idx], additive=False)[0]
 
-    def _cov(self, resp, x, nk, means, reg_covar):
+    def _estimate_gaussian_covariances_full(self, resp, x, nk, means, reg_covar):
         n_components, n_features = means.shape
         covariances = np.empty((n_components, n_features, n_features))
         for k in range(n_components):
@@ -234,10 +234,10 @@ class OrtizGaussianMixture(KendallGaussianMixture):
         return zip(combis, w_combis)
 
     def _corrcoef(self, x, w, i, j):
-        combis = list(combinations(x.T, 2))
+        combis = list(combinations(x, 2))
         w_combis = list(combinations(w, 2))
         limit = self.initial_limit
-        for i in range(5):
+        for _ in range(5):
             s1 = 0
             s2 = 0
             for combi, (w1, w2) in self.get_combinations(combis, w_combis):
