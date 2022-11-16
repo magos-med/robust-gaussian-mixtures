@@ -89,11 +89,12 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
     )
 
     try:
-        result.get(timeout=60)
+        result.get(timeout=240)
         pool.close()
         pool.join()
     except TimeoutError:
         pool.close()
+        pool.terminate()
 
     for col in results:
         df[col] = results[col]
@@ -110,8 +111,8 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
 
 def main(n_tests):
     # _n_samples = np.random.choice([100, 1000, 10000, 100000], p=[0.7, 0.1, 0.1, 0.1], size=n_tests)
-    _n_samples = np.random.choice([100, 1000, 10000], p=[0.7, 0.15, 0.15], size=n_tests)
-    # _n_samples = np.random.choice([100000], size=n_tests)
+    # _n_samples = np.random.choice([100, 1000, 10000], p=[0.7, 0.15, 0.15], size=n_tests)
+    _n_samples = np.random.choice([1000, 10000], size=n_tests)
     # _n_clusters = np.random.choice(range(3, 20), size=n_tests)
     _n_clusters = np.random.choice(range(3, 9), size=n_tests)
     boxes_size = np.random.uniform(1.5, 20, n_tests)
