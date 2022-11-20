@@ -2,6 +2,7 @@ import numpy as np
 import plotly.express as px
 
 from clustering import (
+    StandardKMeans,
     StandardGaussianMixture,
     SpearmanGaussianMixture,
     MADSpearmanGaussianMixture,
@@ -11,9 +12,13 @@ from clustering import (
     MADOrtizGaussianMixture,
     ApproxOrtizGaussianMixture,
     MADApproxOrtizGaussianMixture,
+    ChoquetGaussianMixture,
+    OrtizChoquetGaussianMixture,
+    ApproxOrtizChoquetGaussianMixture
 )
 
 ALL_MODELS = (
+    StandardKMeans,
     StandardGaussianMixture,
     SpearmanGaussianMixture,
     MADSpearmanGaussianMixture,
@@ -23,6 +28,9 @@ ALL_MODELS = (
     MADOrtizGaussianMixture,
     ApproxOrtizGaussianMixture,
     MADApproxOrtizGaussianMixture,
+    ChoquetGaussianMixture,
+    OrtizChoquetGaussianMixture,
+    ApproxOrtizChoquetGaussianMixture
 )
 
 

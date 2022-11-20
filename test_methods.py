@@ -9,7 +9,7 @@ from traceback import print_exc
 from multiprocessing import Pool, Manager, TimeoutError
 from itertools import repeat
 
-from utils import ALL_MODELS
+from utils import ALL_MODELS, StandardKMeans
 
 
 OUTPUT_FILE = 'output/test_results.csv'
@@ -31,23 +31,34 @@ def calculate_distance(x_train_scaled, true_labels, n_clusters):
 def test_method(model, results, x_train_scaled, true_labels, x_train_noise_scaled, true_labels_noise, n_clusters,
                 reg_covar=1e-6):
     try:
-        gmm = model(n_components=n_clusters, max_iter=100, reg_covar=reg_covar)
+        if issubclass(model, StandardKMeans):
+            gmm = model(n_clusters=n_clusters)
+        else:
+            gmm = model(n_components=n_clusters, max_iter=100, reg_covar=reg_covar)
         gmm.fit(x_train_scaled)
         score = gmm.accuracy_score(x_train_scaled, true_labels)
         results[f'{model.name}_score'] = score
 
-        gmm_noise = model(n_components=n_clusters, max_iter=100, reg_covar=reg_covar)
+        if issubclass(model, StandardKMeans):
+            gmm_noise = model(n_clusters=n_clusters)
+        else:
+            gmm_noise = model(n_components=n_clusters, max_iter=100, reg_covar=reg_covar)
         gmm_noise.fit(x_train_noise_scaled)
         score_noise = gmm_noise.accuracy_score(x_train_noise_scaled, true_labels_noise)
         results[f'{model.name}_score_noise'] = score_noise
 
-        results[f'{model.name}_centroid_variation'] = np.linalg.norm(gmm.means_ - gmm_noise.means_)
+        if issubclass(model, StandardKMeans):
+            results[f'{model.name}_centroid_variation'] = np.linalg.norm(
+                gmm.cluster_centers_ - gmm_noise.cluster_centers_
+            )
+        else:
+            results[f'{model.name}_centroid_variation'] = np.linalg.norm(gmm.means_ - gmm_noise.means_)
 
-        total = 0
-        for cov, cov_noise in zip(gmm.covariances_, gmm_noise.covariances_):
-            variation = np.linalg.norm(cov / np.linalg.norm(cov) - cov_noise / np.linalg.norm(cov_noise))
-            total += variation
-        results[f'{model.name}_cov_variation'] = total
+            total = 0
+            for cov, cov_noise in zip(gmm.covariances_, gmm_noise.covariances_):
+                variation = np.linalg.norm(cov / np.linalg.norm(cov) - cov_noise / np.linalg.norm(cov_noise))
+                total += variation
+            results[f'{model.name}_cov_variation'] = total
         print(results)
 
     except ZeroDivisionError:
@@ -74,7 +85,7 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
     t0 = time.perf_counter()
     mgr = Manager()
     results = mgr.dict()
-    pool = Pool(processes=9)
+    pool = Pool(processes=13)
     result = pool.starmap_async(
         test_method,
         zip(
@@ -89,7 +100,7 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
     )
 
     try:
-        result.get(timeout=240)
+        result.get(timeout=60)
         pool.close()
         pool.join()
     except TimeoutError:
@@ -111,8 +122,8 @@ def test_all_methods(x_train_scaled, true_labels, x_train_noise_scaled, true_lab
 
 def main(n_tests):
     # _n_samples = np.random.choice([100, 1000, 10000, 100000], p=[0.7, 0.1, 0.1, 0.1], size=n_tests)
-    # _n_samples = np.random.choice([100, 1000, 10000], p=[0.7, 0.15, 0.15], size=n_tests)
-    _n_samples = np.random.choice([1000, 10000], size=n_tests)
+    _n_samples = np.random.choice([100, 1000, 10000], p=[0.7, 0.15, 0.15], size=n_tests)
+    # _n_samples = np.random.choice([1000, 10000], size=n_tests)
     # _n_clusters = np.random.choice(range(3, 20), size=n_tests)
     _n_clusters = np.random.choice(range(3, 9), size=n_tests)
     boxes_size = np.random.uniform(1.5, 20, n_tests)
